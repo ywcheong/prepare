@@ -1,5 +1,5 @@
 # prepare
-Prepare a copy-and-paste-ready LLM prompt for directories.
+Prepare a copy-paste ready LLM prompt.
 
 ## Installation
 To install, run the following:
@@ -123,10 +123,15 @@ prepare SOURCE ... [options]
     * Relative or absolute paths of input directories/files.
     * Multiple sources are supported.
 * Options:
-    * `-h`: Display help message.
-    * `-G`: Include `.git` contents (not recommended).
-    * `-g`: Include `.gitignore` listed contents.
-    * `-p`: Include `.prepareignore` listed contents.
-    * `-a`: Include hidden files (excluding `.git`).
-    * `-v`: Enable verbose logging to stderr.
-    * `-s`: Disable stderr message (ignoring `-v`).
+    * Traversing Options
+      * `-d depth`: Set maximum recursion depth. (default=6)
+    * Ignore Options
+      * `-G`: Include `.git` contents (not recommended).
+      * `-g`: Include `.gitignore` listed contents.
+      * `-p`: Include `.prepareignore` listed contents.
+      * `-a`: Include hidden files (excluding `.git`).
+    * Log Options
+      * `-v`: Enable verbose logging to stderr.
+      * `-s`: Disable logging to stderr (overrides `-v`).
+    * Miscellaneous
+      * `-h`: Display help message.

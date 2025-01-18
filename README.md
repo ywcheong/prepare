@@ -2,19 +2,17 @@
 Prepare a copy-and-paste-ready LLM prompt for directories.
 
 ## Installation
-To install, run the following.
-
+To install, run the following:
 ```bash
 sudo ./install-prepare
 ```
 
-To uninstall, run the following.
+To uninstall, run the following:
 ```bash
 sudo ./uninstall-prepare
 ```
 
-If you want to explicitly set or change what python executable that this program would use, for example `python3.11`, run the following.
-
+If you want to explicitly set or change the Python executable that this program uses (ex: `python3.11`), run:
 ```bash
 sudo ./install-prepare python3.11
 ```
@@ -22,10 +20,10 @@ sudo ./install-prepare python3.11
 ### Dependencies
 You need `python3.*`, `python3` or `python` to run this program.
 
-*Note: Python 2 is not Python.*
+*Note: Python 2 is not supported.*
 
 ## How to use
-For example, if your project seems like this:
+For example, if your project structure looks like this:
 
 ```
 rock-paper-scissor/
@@ -45,7 +43,7 @@ rock-paper-scissor/
         └── random_hand.py
 ```
 
-Open the root path of your project in a terminal, and run the following.
+Open the root path of your project in a terminal and run:
 
 ```bash
 $ prepare src/service > prompt-service.md
@@ -53,7 +51,7 @@ Total 1 directories, 1 loaded, 0 skipped
 Total 3 files, 3 loaded, 0 skipped
 ```
 
-When you open the `prompt-service.md`, the contents of the file is as the following. This is called as **Prompt Markdown**.
+When you open the `prompt-service.md`, it will contain the following **Prompt Markdown**:
 
 ```
     The following text describes structure and contents of this project.
@@ -93,17 +91,17 @@ When you open the `prompt-service.md`, the contents of the file is as the follow
     # Question
 ```
 
-Starting from this prompt markdown, you can freely make the question and copy-and-paste it to your favorite LLM, like [ChatGPT](https://chatgpt.com/), [Claude](https://claude.ai/) or [Perplexity](https://www.perplexity.ai/).
+You can now create a question based on this prompt markdown and copy-paste it into your favorite LLM tool like [ChatGPT](https://chatgpt.com/), [Claude](https://claude.ai/) or [Perplexity](https://www.perplexity.ai/).
 
 ### Auto Skipping
-This program automatically skips some contents(file and directory) if they are one of:
+This program automatically skips certain contents (files and directories) if they match any of these criteria:
 
-* Contents of `.git` directory and itself
-* Found match pattern in `.gitignore`
-* Found match pattern in `.prepareignore`
-* Hidden
+* Located in `.git` directory or its subdirectories.
+* Listed in `.gitignore`.
+* Listed in `.prepareignore`.
+* Hidden files or directories.
 
-For example, since `src/secret/*` is listed on `.gitignore`, the following command's markdown result does not contain any sensitive contents. Note that non-root `.gitignore` and `.prepareignore` files are also recognized.
+For example, since `src/secret/*` is listed in `.gitignore`, running the following command ensures sensitive contents are excluded from the markdown output:
 
 ```
 $ prepare . > propmt-src.md
@@ -120,12 +118,15 @@ Total 83 files, 7 loaded, 76 skipped
 ```bash
 prepare SOURCE ... [options]
 ```
-kil
-* `SOURCE ...`: relative or absolute path of ingredients. Multiple sources are supported.
-* options:
-  * `-h`: help message
-  * `-G`: include `.git` contents (not recommended)
-  * `-g`: include `.gitignore` listed contents
-  * `-p`: include `.prepareignore` listed contents
-  * `-a`: include hidden files (does not include git-related ones)
-  * `-v`: verbose stderr log message
+
+* `SOURCE ...`
+    * Relative or absolute paths of input directories/files.
+    * Multiple sources are supported.
+* Options:
+    * `-h`: Display help message.
+    * `-G`: Include `.git` contents (not recommended).
+    * `-g`: Include `.gitignore` listed contents.
+    * `-p`: Include `.prepareignore` listed contents.
+    * `-a`: Include hidden files (excluding `.git`).
+    * `-v`: Enable verbose logging to stderr.
+    * `-s`: Disable stderr message (ignoring `-v`).

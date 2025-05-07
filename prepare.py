@@ -1,152 +1,310 @@
-from pathlib import Path
+import os
+import sys
 import argparse
-
-
-class Filter:
-    def __init__(self):
-        pass
-
-    def add_condition(self):
-        pass
-
-    def is_match(self, path):
-        pass
-
-
-class FilterStack:
-    def __init__(self):
-        self.stack = []
-
-    def add_filter(self, filter):
-        self.stack.append(filter)
-
-    def pop_filter(self):
-        self.stack.pop()
-
-    def is_match(self, path):
-        for filter in self.stack:
-            if filter.is_match(path):
-                return True
-        return False
+import subprocess
 
 
 class Content:
-    def __init__(self, name, children, is_readable):
-        self.name = name
-        self.children = children
-        self.is_readable = is_readable
+    """Represents a unit of directory or file in the project."""
 
-    def is_file(self):
-        return self.children is None
+    is_using_gitignore = True
+    is_verbose = False
 
-    def is_directory(self):
-        return not self.is_file()
+    def __init__(self, path):
+        self.path = os.path.abspath(path)
+        self.content_type = None  # 'directory' | 'text_file' | 'etc'
+        self.ignore_reason = None
+        self.text = None
+        self.child = []
+
+    def verbose(self):
+        """Prints verbose information for debugging purposes."""
+        if Content.is_verbose:
+            if self.ignore_reason is not None:
+                print(f"{self.path} ({self.ignore_reason})", file=sys.stderr)
+            else:
+                print(f"{self.path} ({self.content_type})", file=sys.stderr)
+
+    def traverse(self):
+        """
+        Recursively traverses the file system starting from self.path.
+        Sets ignore_reason if the file/directory should be skipped.
+        Populates self.child for directories, and self.text for text files.
+        """
+        base = os.path.basename(self.path)
+
+        def set_ignore_and_type(reason):
+            self.ignore_reason = reason
+            if os.path.isdir(self.path):
+                self.content_type = "directory"
+            elif os.path.isfile(self.path):
+                self.content_type = "text_file"
+            else:
+                self.content_type = "etc"
+            self.verbose()
+
+        # Skip hidden files/directories (except .gitignore)
+        if base.startswith(".") and base != ".gitignore":
+            set_ignore_and_type("hidden")
+            return
+
+        # Skip files/directories listed in .gitignore
+        if Content.is_using_gitignore and is_git_ignored(self.path):
+            set_ignore_and_type(".gitignore listed")
+            return
+
+        # Determine the type of content and process accordingly
+        if os.path.isdir(self.path):
+            self.content_type = "directory"
+            try:
+                for child_name in sorted(os.listdir(self.path)):
+                    child_path = os.path.join(self.path, child_name)
+                    child = Content(child_path)
+                    self.child.append(child)
+                    child.traverse()
+            except PermissionError:
+                # Skip directories without permission
+                pass
+        elif os.path.isfile(self.path):
+            try:
+                # Try reading as UTF-8 text file
+                with open(self.path, "r", encoding="utf-8") as f:
+                    self.text = f.read()
+                self.content_type = "text_file"
+            except Exception:
+                # If not readable as text, treat as 'etc'
+                self.content_type = "etc"
+        else:
+            # For symlinks, binaries, etc.
+            self.content_type = "etc"
+
+        self.verbose()
 
 
-#################### Argument Parsing ####################
+def is_git_ignored(path):
+    """
+    Checks if the given path is ignored by .gitignore using 'git check-ignore'.
+    Returns True if ignored, False otherwise.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--quiet", path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(path),
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
-class Properties:
-    VERBOSE, DEFAULT, SILENCE = 4, 3, 2
-    GIT, GITIGNORE, PREPAREIGNORE, HIDDEN = 9, 8, 7, 6
-
-    def __init__(self, depth, ignores, log_mode):
-        self.depth = depth  # traversing options
-        self.ignores = ignores  # ignore options
-        self.log_mode = log_mode  # log options
-
-    def __repr__(self):
-        return f"Properties[depth={self.depth}, ignores={self.ignores}, log_mode={self.log_mode}]"
-
-
-def parse_arguments():
+def parse_argument():
+    """
+    Parses command-line arguments and returns the parsed object.
+    """
     parser = argparse.ArgumentParser(
-        description="Prepare a copy-paste ready LLM prompt."
+        description="prepare - Prepare an LLM prompt for copy-paste use."
     )
-
-    # Positional argument for source directories/files
     parser.add_argument(
         "sources",
         nargs="+",
-        help="Relative or absolute paths of input directories/files. Multiple sources are supported.",
-    )
-
-    # Traversing options
-    parser.add_argument(
-        "-d",
-        "--depth",
-        type=int,
-        default=6,
-        help="Set maximum recursion depth. (default=6)",
-    )
-
-    # Ignore options
-    parser.add_argument(
-        "-G", action="store_true", help="Include `.git` contents (not recommended)."
+        help="Relative or absolute paths to input directories/files. (multiple sources are supported)",
     )
     parser.add_argument(
-        "-g", action="store_true", help="Include `.gitignore` listed contents."
+        "-a",
+        action="store_true",
+        help="Read and include all files in the result, without skipping any",
     )
     parser.add_argument(
-        "-p", action="store_true", help="Include `.prepareignore` listed contents."
+        "-s",
+        action="store_true",
+        help="Show only statistics, without displaying which files and directories were skipped",
     )
     parser.add_argument(
-        "-a", action="store_true", help="Include hidden files (excluding `.git`)."
+        "-v",
+        action="store_true",
+        help="Show verbose logs",
+    )
+    return parser.parse_args()
+
+
+def get_file_extension(filename):
+    """
+    Returns the file extension for syntax highlighting in markdown code blocks.
+    If no extension, returns 'text'.
+    """
+    ext = os.path.splitext(filename)[1].lstrip(".").lower()
+    return ext if ext else "text"
+
+
+def build_structure(content, prefix="", is_last=True):
+    """
+    Recursively builds a tree-like structure (as lines) for the directory/file hierarchy.
+    Adds ignore reason in parentheses if applicable.
+    """
+    lines = []
+
+    base = os.path.basename(content.path)
+    node_line = ""
+    connector = "└── " if is_last else "├── "
+    node_line += prefix + connector + base
+
+    # Add ignore reason if this node is skipped
+    if content.ignore_reason is not None:
+        node_line += f" ({content.ignore_reason})"
+    lines.append(node_line)
+
+    # Recursively process child nodes if this is a directory and not ignored
+    if content.content_type == "directory" and content.ignore_reason is None:
+        child_count = len(content.child)
+        for idx, child in enumerate(content.child):
+            is_child_last = idx == child_count - 1
+            child_prefix = prefix + ("    " if is_last else "│   ")
+            lines.extend(build_structure(child, child_prefix, is_child_last))
+    return lines
+
+
+def build_file_contents(c):
+    """
+    Recursively collects the contents of all readable text files in the structure.
+    Each file's content is wrapped in a markdown code block with the correct extension.
+    """
+    lines = []
+
+    if c.content_type == "text_file" and c.ignore_reason is None:
+        lines.append(f"### File Content: `{c.path}`")
+        lines.append(f"````{get_file_extension(c.path)}")
+        lines.append(c.text)
+        lines.append("````")
+        lines.append("")
+
+    elif c.content_type == "directory" and c.ignore_reason is None:
+        for child in c.child:
+            lines += build_file_contents(child)
+
+    return lines
+
+
+def build_markdown(contents):
+    """
+    Builds the full markdown output for the given list of Content objects.
+    Includes both the directory structure and file contents.
+    """
+    lines = ["# Project Structure and File Contents\n"]
+    for content in contents:
+        # Add directory/file structure tree
+        lines.append(f"## Structure: `{content.path}`")
+        lines.append("````")
+        lines += build_structure(content, prefix="", is_last=True)
+        lines.append("````")
+        lines.append("")
+
+        # Add file contents
+        lines += build_file_contents(content)
+
+    return "\n".join(lines)
+
+
+def build_stats(contents, markdown):
+    """
+    Computes and returns statistics about the processed files and directories.
+    Includes totals, counts, character/line statistics, and groups skipped files/directories by reason.
+    """
+    total_dirs, read_dirs, skipped_dirs = 0, 0, 0
+    total_files, read_files, skipped_files = 0, 0, 0
+
+    # Dictionary to group skipped files/directories by reason
+    skipped_reasons = {}
+
+    def count_content(content):
+        nonlocal total_dirs, read_dirs, skipped_dirs
+        nonlocal total_files, read_files, skipped_files
+
+        if content.content_type == "directory":
+            total_dirs += 1
+            if content.ignore_reason is None:
+                read_dirs += 1
+            else:
+                skipped_dirs += 1
+                skipped_reasons.setdefault(content.ignore_reason, []).append(
+                    content.path
+                )
+            for child in content.child:
+                count_content(child)
+        elif content.content_type == "text_file":
+            total_files += 1
+            if content.ignore_reason is None:
+                read_files += 1
+            else:
+                skipped_files += 1
+                skipped_reasons.setdefault(content.ignore_reason, []).append(
+                    content.path
+                )
+        else:
+            total_files += 1
+            if content.ignore_reason is not None:
+                skipped_files += 1
+                skipped_reasons.setdefault(content.ignore_reason, []).append(
+                    content.path
+                )
+
+    for content in contents:
+        count_content(content)
+
+    stats = []
+
+    # Output skipped files/directories grouped by reason
+    if skipped_reasons:
+        for reason, paths in skipped_reasons.items():
+            stats.append(f"SKIPPED: {reason}")
+            for p in paths:
+                stats.append(f"- {p}")
+        stats.append("")
+
+    # Output statistics
+    stats.append(
+        f"Directories: total {total_dirs}, read {read_dirs}, skipped {skipped_dirs}"
+    )
+    stats.append(
+        f"Files: total {total_files}, read {read_files}, skipped {skipped_files}"
+    )
+    line_count = markdown.count("\n") + 1
+    char_with_spaces = len(markdown)
+    char_without_spaces = len(markdown) - markdown.count(" ")
+    stats.append(
+        f"Markdown: {line_count} lines, {char_with_spaces} characters (with spaces), {char_without_spaces} characters (without spaces)"
     )
 
-    # Log options
-    parser.add_argument(
-        "-v", action="store_true", help="Enable verbose logging to stderr."
-    )
-    parser.add_argument(
-        "-s", action="store_true", help="Disable logging to stderr (overrides `-v`)."
-    )
-
-    args = parser.parse_args()
-
-    # Determine log mode
-    log_mode = Properties.DEFAULT
-    if args.v:
-        log_mode = Properties.VERBOSE
-    if args.s:
-        log_mode = Properties.SILENCE
-
-    # Collect ignore options
-    ignores = []
-    if args.G:
-        ignores.append(Properties.GIT)
-    if args.g:
-        ignores.append(Properties.GITIGNORE)
-    if args.p:
-        ignores.append(Properties.PREPAREIGNORE)
-    if args.a:
-        ignores.append(Properties.HIDDEN)
-
-    return args.sources, Properties(
-        depth=args.depth, ignores=ignores, log_mode=log_mode
-    )
-
-#################### Scanning ####################
-
-
-def scan_from(root, properties):
-    pass
-
-
-#################### Printing ####################
-
-
-def content_to_prompt(content):
-    pass
-
-
-#################### Main ####################
+    return "\n".join(stats)
 
 
 def main():
-    sources, property = parse_arguments()
-    print(sources)
-    print(repr(property))
+    """
+    Entry point of the script.
+    Parses arguments, traverses sources, builds markdown and statistics, and outputs results.
+    """
+    args = parse_argument()
+
+    Content.is_using_gitignore = not args.a
+    Content.is_verbose = args.v
+
+    # Validate input paths and build Content objects
+    contents = []
+    for src in args.sources:
+        source_path = os.path.abspath(src)
+        if not os.path.exists(source_path):
+            print(f"Source not found: {src}", file=sys.stderr)
+            sys.exit(1)
+
+        content = Content(source_path)
+        content.traverse()
+        contents.append(content)
+
+    # Build markdown and statistics output
+    markdown = build_markdown(contents)
+    stats = build_stats(contents, markdown)
+    print(markdown, file=sys.stdout, end="")
+    print(stats, file=sys.stderr)
 
 
 if __name__ == "__main__":

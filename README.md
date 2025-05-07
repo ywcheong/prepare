@@ -1,35 +1,50 @@
 # prepare
-Prepare a copy-paste ready LLM prompt.
+Prepare an LLM prompt for copy-paste use.
 
 ## Installation
-To install, run the following:
+
+To install, run the following command:
 ```bash
 sudo ./install-prepare
 ```
 
-To uninstall, run the following:
+To remove, run:
 ```bash
-sudo ./uninstall-prepare
+sudo ./remove-prepare
 ```
 
-If you want to explicitly set or change the Python executable that this program uses (ex: `python3.11`), run:
-```bash
-sudo ./install-prepare python3.11
-```
+The install and removal scripts require root privileges to copy or delete Python scripts in `/usr/bin`. If you do not want to grant root privilege, you may install the script elsewhere manually.
 
 ### Dependencies
-You need `python3.*`, `python3` or `python` to run this program.
+
+- `python3` (or `python`)
+- `git`
+
+All dependencies must be discoverable in your `$PATH`. When you use the install script, it will automatically verify these dependencies before proceeding; if any are missing, installation will be canceled.
 
 *Note: Python 2 is not supported.*
 
-## How to use
-For example, if your project structure looks like this:
+## Usage
 
+**To use `prepare`, simply select the directory(s) you want to provide to the LLM and enter its path as arguments. The `prepare` program outputs Markdown to standard output and execution statistics to stderr.** Here is an example (list of optional arguments are listed at the end of the document):
+
+```bash
+$ prepare src/service > prompt.md
+SKIPPED: .gitignore listed
+- /app/rock-paper-scissor/src/service/__pycache__
+
+Directories: total 2, read 1, skipped 1
+Files: total 3, read 3, skipped 0
+Markdown: 35 lines, 812 characters (with spaces), 719 characters (without spaces)
 ```
+
+Suppose your directory structure is as follows:
+
+```bash
 rock-paper-scissor/
 ├── README.md
 ├── .git/
-│   └── (truncated)
+│   └── ...
 └── src/
     ├── game.py
     ├── model/
@@ -38,100 +53,76 @@ rock-paper-scissor/
     ├── secret/
     │   └── api-key.env
     └── service/
+        ├── __pycache__
+        │   └── ...
         ├── __init__.py
         ├── ai_agent.py
         └── random_hand.py
 ```
 
-Open the root path of your project in a terminal and run:
+If you open the generated `prompt.md` file, you will see something like this:
 
-```bash
-$ prepare src/service > prompt-service.md
-Total 1 directories, 1 loaded, 0 skipped
-Total 3 files, 3 loaded, 0 skipped
-```
+`````
+# Project Structure and File Contents
 
-When you open the `prompt-service.md`, it will contain the following **Prompt Markdown**:
-
-```
-    The following text describes structure and contents of this project.
-    Please read the text and answer the question at the end.
-
-    # Structure of the Project
-    src/service/
+## Structure: `/app/rock-paper-scissor/src/service`
+````
+└── service
     ├── __init__.py
+    ├── __pycache__ (.gitignore listed)
     ├── ai_agent.py
     └── random_hand.py
+````
 
-    # Contents of Each File
-    ## src/service/__init__.py
-    ```py
-    from .ai_agent import *
-    from .random_hand import *
-    ```
+### File Content: `/app/rock-paper-scissor/src/service/__init__.py`
+````py
+from .ai_agent import *
+from .random_hand import *
+````
 
-    ## src/service/ai_agent.py
-    ```py
-    from model import Hand
+### File Content: `/app/rock-paper-scissor/src/service/ai_agent.py`
+````py
+from model import Hand
 
-    def get_ai_hand():
-        return Hand(0)
-    ```
+def get_ai_hand():
+    return Hand(0)  # smart ai believes that a rock is always the best play
+````
 
-    ## src/service/__init__.py
-    ```py
-    import random
-    from model import Hand
+### File Content: `/app/rock-paper-scissor/src/service/random_hand.py`
+````py
+import random
+from model import Hand
 
-    def get_random_hand():
-        random_hand_type = random.randint(0, 3)
-        return Hand(random_hand_type)
-    ```
+def get_random_hand():
+    random_hand_type = random.randint(0, 3)    # bug! random.randint(0, 2) is correct
+    return Hand(random_hand_type)
+````
+`````
 
-    # Question
-```
+You can copy and paste this Markdown file into your preferred LLM tool-such as [ChatGPT](https://chatgpt.com/), [Claude](https://claude.ai/), or [Perplexity](https://www.perplexity.ai/)-to conveniently provide project context.
 
-You can now create a question based on this prompt markdown and copy-paste it into your favorite LLM tool like [ChatGPT](https://chatgpt.com/), [Claude](https://claude.ai/) or [Perplexity](https://www.perplexity.ai/).
+### Auto-Skip Feature
 
-### Auto Skipping
-This program automatically skips certain contents (files and directories) if they match any of these criteria:
+This program automatically skips files and directories that meet the following criteria:
 
-* Located in `.git` directory or its subdirectories.
-* Listed in `.gitignore`.
-* Listed in `.prepareignore`.
-* Hidden files or directories.
+* Hidden files and directories (any file or directory starting with a `.`)
+  * Exception: the `.gitignore` file itself is not skipped.
+* Any files or directories specified in `.gitignore`
 
-For example, since `src/secret/*` is listed in `.gitignore`, running the following command ensures sensitive contents are excluded from the markdown output:
+*Note: Like Git, if a directory is skipped, `prepare` does not read any of its contents. Thus, the contents of skipped directories will NOT be counted in the statistics.*
 
-```
-$ prepare . > propmt-src.md
-SKIPPED: .git folder
-- .git (76 directories, 48 files)
-SKIPPED: .gitignore listed contents
-- src/secret/* (0 directories, 1 files)
-Total 53 directories, 4 loaded, 49 skipped
-Total 83 files, 7 loaded, 76 skipped
-```
-
-## Arguments
+## Command-Line Arguments
 
 ```bash
 prepare SOURCE ... [options]
 ```
 
 * `SOURCE ...`
-    * Relative or absolute paths of input directories/files.
+    * Relative or absolute paths to input directories/files.
     * Multiple sources are supported.
 * Options:
-    * Traversing Options
-      * `-d depth`: Set maximum recursion depth. (default=6)
-    * Ignore Options
-      * `-G`: Include `.git` contents (not recommended).
-      * `-g`: Include `.gitignore` listed contents.
-      * `-p`: Include `.prepareignore` listed contents.
-      * `-a`: Include hidden files (excluding `.git`).
-    * Log Options
-      * `-v`: Enable verbose logging to stderr.
-      * `-s`: Disable logging to stderr (overrides `-v`).
-    * Miscellaneous
-      * `-h`: Display help message.
+    * Skipping
+      * `-a`: Read and include all files in the result, without skipping any
+    * Output
+      * `-h`: Display help message instead of running the program
+      * `-s`: Show only statistics, without displaying which files and directories were skipped

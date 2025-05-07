@@ -17,11 +17,11 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_PATH="/usr/bin/prepare"
 
 if [[ -f "$INSTALL_PATH" ]]; then
-  cp "$SRC_DIR/prepare.py" "$INSTALL_PATH"
+  cp "$SRC_DIR/prepare" "$INSTALL_PATH"
   chmod +x "$INSTALL_PATH"
   echo "Updated existing 'prepare' at $INSTALL_PATH"
 else
-  cp "$SRC_DIR/prepare.py" "$INSTALL_PATH"
+  cp "$SRC_DIR/prepare" "$INSTALL_PATH"
   chmod +x "$INSTALL_PATH"
   echo "Installed new 'prepare' at $INSTALL_PATH"
 fi

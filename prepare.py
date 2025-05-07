@@ -7,8 +7,12 @@ import subprocess
 class Content:
     """Represents a unit of directory or file in the project."""
 
+    max_read_size_byte = None
+    max_traverse_count = None
+
     is_using_gitignore = True
     is_verbose = False
+    traverse_count = 0
 
     def __init__(self, path):
         self.path = os.path.abspath(path)
@@ -32,6 +36,7 @@ class Content:
         Populates self.child for directories, and self.text for text files.
         """
         base = os.path.basename(self.path)
+        Content.traverse_count += 1
 
         def set_ignore_and_type(reason):
             self.ignore_reason = reason
@@ -43,6 +48,11 @@ class Content:
                 self.content_type = "etc"
             self.verbose()
 
+        # 1. Skip symlinks
+        if os.path.islink(self.path):
+            set_ignore_and_type("symlink")
+            return
+
         # Skip hidden files/directories (except .gitignore)
         if base.startswith(".") and base != ".gitignore":
             set_ignore_and_type("hidden")
@@ -51,6 +61,15 @@ class Content:
         # Skip files/directories listed in .gitignore
         if Content.is_using_gitignore and is_git_ignored(self.path):
             set_ignore_and_type(".gitignore listed")
+            return
+
+        # Traverse count check
+        if Content.traverse_count >= Content.max_traverse_count:
+            print(
+                f"Exceeded max file count: {Content.max_traverse_count} (use --maxtraverse n to change)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
             return
 
         # Determine the type of content and process accordingly
@@ -68,6 +87,8 @@ class Content:
         elif os.path.isfile(self.path):
             try:
                 # Try reading as UTF-8 text file
+                if os.path.getsize(self.path) > Content.max_read_size_byte:
+                    set_ignore_and_type("big file")
                 with open(self.path, "r", encoding="utf-8") as f:
                     self.text = f.read()
                 self.content_type = "text_file"
@@ -124,6 +145,18 @@ def parse_argument():
         "-v",
         action="store_true",
         help="Show verbose logs",
+    )
+    parser.add_argument(
+        "--maxsize",
+        type=int,
+        default=100 * 1024,
+        help="Maximum file size (bytes) to read. Default: 102400 (100KiB)",
+    )
+    parser.add_argument(
+        "--maxtraverse",
+        type=int,
+        default=1000,
+        help="Maximum number of files/directories to traverse. Default: 1000",
     )
     return parser.parse_args()
 
@@ -287,6 +320,8 @@ def main():
 
     Content.is_using_gitignore = not args.a
     Content.is_verbose = args.v
+    Content.max_read_size_byte = args.maxsize
+    Content.max_traverse_count = args.maxtraverse
 
     # Validate input paths and build Content objects
     contents = []
